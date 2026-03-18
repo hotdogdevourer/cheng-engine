@@ -43,3 +43,4 @@ Run the executable and follow the interactive prompts to configure threads, diff
 ## License
 
 This project is provided as-is for educational and development purposes.
+Look into the LICENSE file in the project root directory for more licensing information.
