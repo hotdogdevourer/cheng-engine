@@ -29,14 +29,26 @@ static int get_cpu_count() {
 
 #define MAX_THREADS 256
 
-#define TT_SIZE 262144  
+#define TT_SIZE 262144
 /*
    TT_SIZE LOOKUP TABLE (STRICTLY POWER OF 2 ENTRIES)
-   Formula: Entries = (Megabytes * 1024 * 1024) / 8 bytes per entry
+   Formula: Entries = (Bytes * 1024) / 8 bytes per entry
    WARNING: Memory Usage = TT_SIZE * 8 bytes * NUMBER_OF_THREADS
             With 12 threads, 128 MB/table = 1.5 GB Total RAM.
             With 12 threads, 16 GB/table = 192 GB Total RAM (WILL CRASH MOST PCS).
-   
+   Format: [TABLE_SIZE_KB/MB/GB]:   #define TT_SIZE [TABLE_SIZE]
+   --- LOW MEMORY OPTIONS (KB) ---
+   2 KB:   #define TT_SIZE 256          
+   4 KB:   #define TT_SIZE 512          
+   8 KB:   #define TT_SIZE 1024         
+   16 KB:  #define TT_SIZE 2048         
+   32 KB:  #define TT_SIZE 4096         
+   64 KB:  #define TT_SIZE 8192         
+   128 KB: #define TT_SIZE 16384        
+   256 KB: #define TT_SIZE 32768        
+   512 KB: #define TT_SIZE 65536        
+   1 MB:   #define TT_SIZE 131072       
+
    --- SAFE FOR MOST LAPTOPS (Total RAM < 4GB) ---
    2 MB:   #define TT_SIZE 262144       
    4 MB:   #define TT_SIZE 524288       
