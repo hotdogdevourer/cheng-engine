@@ -2,7 +2,7 @@
 
 Goofy goober type chess engine in C idk bro good enough I guess
 
-A lightweight, single-file chess engine written in C featuring a Principal Variation Search (PVS) algorithm, transposition tables, and multi-threading support.
+A lightweight, single-file chess engine written in C with multi-threading support and more goofy studd.
 
 ## Features
 
