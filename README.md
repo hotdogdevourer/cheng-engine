@@ -1,6 +1,6 @@
 # cheng-engine (Cheng Chess Engine)
 
-Goofy goober type chess engine idk bro good enough I guess
+Goofy goober type chess engine in C idk bro good enough I guess
 
 A lightweight, single-file chess engine written in C featuring a Principal Variation Search (PVS) algorithm, transposition tables, and multi-threading support.
 
