@@ -6,12 +6,7 @@ A lightweight, single-file chess engine written in C featuring a Principal Varia
 
 ## Features
 
-- **Search Algorithm**: Principal Variation Search (PVS) with alpha-beta pruning.
-- **Optimization**: Transposition tables with Zobrist hashing for position lookup.
-- **Move Ordering**: Captures-first generation and killer move heuristics.
-- **Evaluation**: Material counting with piece-square tables for positional awareness.
-- **Portability**: Cross-platform support for Windows and POSIX systems.
-- **Configuration**: Adjustable search depth and thread count at runtime.
+- Uhhh it's cool i think
 
 ## Compilation
 
