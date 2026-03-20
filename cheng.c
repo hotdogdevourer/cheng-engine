@@ -1,4 +1,5 @@
 /*
+COMPILE: gcc -O3 -s -lm -pthread chess.c -o chess
    TT_SIZE LOOKUP TABLE (STRICTLY POWER OF 2 ENTRIES)
    Formula: Entries = (Bytes * 1024) / 8 bytes per entry
    WARNING: Memory Usage = TT_SIZE * 8 bytes * NUMBER_OF_THREADS
@@ -79,7 +80,7 @@ static void sleep_ms(int ms) {
 #endif
 
 #define MAX_THREADS 256
-#define TT_SIZE 16777216
+#define TT_SIZE 67108864
 #define EMPTY 0
 #define WHITE 1
 #define BLACK 2
@@ -89,7 +90,7 @@ static void sleep_ms(int ms) {
 #define R 4
 #define Q 5
 #define K 6
-#define debug_pvs false
+int debug_pvs = 0;
 
 #define BOARD_SIZE 64
 #define MAX_MOVES 256
@@ -480,7 +481,6 @@ inline bool is_legal(Board* b, Move* m, uint8_t color) {
     return !check;
 }
 
-// ============ PIECE SQUARE TABLES - MIDGAME ============
 const int8_t pst_pawn_mg[64] = {
      0,   0,   0,   0,   0,   0,   0,   0,
     50,  50,  50,  50,  50,  50,  50,  50,
@@ -613,7 +613,6 @@ const int8_t pst_king_eg[64] = {
     -50, -40, -30, -20, -20, -30, -40, -50
 };
 
-// Helper function to detect endgame
 bool is_endgame(const Board* b) {
     int material = 0;
     for (int i = 0; i < 64; i++) {
@@ -628,14 +627,12 @@ bool is_endgame(const Board* b) {
     return material < 15;
 }
 
-// ============ FULL PRODUCTION EVALUATION ============
 int evaluate_fast(const Board* b) {
     int score = 0;
     bool eg = is_endgame(b);
     int bk_idx = -1, wk_idx = -1;
     int black_pawns = 0, white_pawns = 0;
     
-    // ========== MATERIAL + PST + KING LOCATION ==========
     for (int i = 0; i < 64; i++) {
         uint8_t piece = get_piece(b, i);
         if (piece == EMPTY) continue;
@@ -645,7 +642,6 @@ int evaluate_fast(const Board* b) {
         int material_value = 0;
         int pst_value = 0;
         
-        // Material values
         switch(type) {
             case P: 
                 material_value = 100;
@@ -664,7 +660,6 @@ int evaluate_fast(const Board* b) {
             case R: 
                 material_value = 500;
                 pst_value = eg ? pst_rook_eg[i] : pst_rook_mg[i];
-                // BONUS: Rook on 7th rank
                 if ((color == BLACK && i / 8 == 6) || (color == WHITE && i / 8 == 1)) {
                     pst_value += 50;
                 }
@@ -688,8 +683,6 @@ int evaluate_fast(const Board* b) {
         }
     }
     
-    // ========== PAWN STRUCTURE ==========
-    // Doubled pawns
     for (int c = 0; c < 8; c++) {
         int black_col = 0, white_col = 0;
         for (int r = 0; r < 8; r++) {
@@ -701,7 +694,6 @@ int evaluate_fast(const Board* b) {
         if (white_col > 1) score -= (white_col - 1) * 25;
     }
     
-    // Isolated pawns
     for (int i = 0; i < 64; i++) {
         uint8_t piece = get_piece(b, i);
         if (piece != BLACK * 8 + P && piece != WHITE * 8 + P) continue;
@@ -709,7 +701,6 @@ int evaluate_fast(const Board* b) {
         int col = i % 8;
         bool isolated = true;
         
-        // Check left
         if (col > 0) {
             for (int r = 0; r < 8; r++) {
                 uint8_t p = get_piece(b, rc_to_idx(r, col - 1));
@@ -720,7 +711,6 @@ int evaluate_fast(const Board* b) {
                 }
             }
         }
-        // Check right
         if (isolated && col < 7) {
             for (int r = 0; r < 8; r++) {
                 uint8_t p = get_piece(b, rc_to_idx(r, col + 1));
@@ -738,37 +728,33 @@ int evaluate_fast(const Board* b) {
         }
     }
     
-    // ========== KING SAFETY ==========
     if (!eg) {
-        // Penalize exposed kings
         if (bk_idx != -1) {
             int r = bk_idx / 8, c = bk_idx % 8;
             if (r > 1 && r < 6 && c > 1 && c < 6) {
-                score += 40;  // Black king in center early = bad
+                score += 40;  
             }
         }
         if (wk_idx != -1) {
             int r = wk_idx / 8, c = wk_idx % 8;
             if (r > 1 && r < 6 && c > 1 && c < 6) {
-                score -= 40;  // White king in center early = bad
+                score -= 40;  
             }
         }
     } else {
-        // In endgame, king activity is GOOD
         if (bk_idx != -1) {
             int r = bk_idx / 8, c = bk_idx % 8;
             int dist_to_center = abs(r - 4) + abs(c - 4);
-            score -= dist_to_center * 5;  // Bonus for king toward center
+            score -= dist_to_center * 5;  
         }
         if (wk_idx != -1) {
             int r = wk_idx / 8, c = wk_idx % 8;
             int dist_to_center = abs(r - 4) + abs(c - 4);
-            score += dist_to_center * 5;  // Bonus for king toward center
+            score += dist_to_center * 5;  
         }
     }
     
-    // ========== CENTER CONTROL ==========
-    int center_squares[] = {27, 28, 35, 36};  // d4, e4, d5, e5
+    int center_squares[] = {27, 28, 35, 36};  
     for (int i = 0; i < 4; i++) {
         int sq = center_squares[i];
         uint8_t piece = get_piece(b, sq);
@@ -788,7 +774,6 @@ int evaluate_fast(const Board* b) {
         }
     }
     
-    // ========== PASSED PAWN BONUS ==========
     for (int i = 0; i < 64; i++) {
         uint8_t piece = get_piece(b, i);
         if (piece != BLACK * 8 + P && piece != WHITE * 8 + P) continue;
@@ -798,7 +783,6 @@ int evaluate_fast(const Board* b) {
         bool passed = true;
         
         if (piece == BLACK * 8 + P) {
-            // Black pawn moving down - check rows below
             for (int r = row + 1; r < 8; r++) {
                 for (int c = col - 1; c <= col + 1; c++) {
                     if (c >= 0 && c < 8) {
@@ -811,9 +795,8 @@ int evaluate_fast(const Board* b) {
                 }
                 if (!passed) break;
             }
-            if (passed) score += (7 - row) * 20;  // Bonus increases as pawn advances
+            if (passed) score += (7 - row) * 20;  
         } else {
-            // White pawn moving up - check rows above
             for (int r = row - 1; r >= 0; r--) {
                 for (int c = col - 1; c <= col + 1; c++) {
                     if (c >= 0 && c < 8) {
@@ -826,11 +809,10 @@ int evaluate_fast(const Board* b) {
                 }
                 if (!passed) break;
             }
-            if (passed) score -= (row) * 20;  // Bonus increases as pawn advances
+            if (passed) score -= (row) * 20;  
         }
     }
     
-    // ========== BISHOP PAIR BONUS ==========
     int black_bishops = 0, white_bishops = 0;
     for (int i = 0; i < 64; i++) {
         uint8_t piece = get_piece(b, i);
@@ -840,8 +822,6 @@ int evaluate_fast(const Board* b) {
     if (black_bishops >= 2) score += 30;
     if (white_bishops >= 2) score -= 30;
     
-    // ========== TEMPO BONUS ==========
-    // (Implicit in other evaluations - could add +10 for side to move)
     
     return score;
 }
@@ -1116,6 +1096,35 @@ int select_search_depth() {
     return depth;
 }
 
+
+int select_debug() {
+    char buf[4];
+    printf("Enter debug (1=true, 0=false, default=false): ");
+    
+    if (scanf("%3s", buf) != 1) {
+        printf("Input error. Not debugging.\n\n");
+        return 0;
+    }
+    
+    char* endptr;
+    long val = strtol(buf, &endptr, 10);
+    
+    if (endptr == buf || *endptr != '\0') {
+        printf("Invalid input. Not debugging.\n\n");
+        return 0;
+    }
+
+    bool debug = (val != 0);
+    
+    if (debug) {
+        printf("Using debug value: %d.\n\n", (int)debug);
+        return 1;
+    } else {
+        printf("Not debugging.\n\n");
+        return 0;
+    }
+}
+
 void check_game_over(Board* b, uint8_t turn) {
     Move moves[MAX_MOVES];
     int count;
@@ -1131,10 +1140,263 @@ void check_game_over(Board* b, uint8_t turn) {
     }
 }
 
-int main() {
+void output_board_raw(const Board* b, const char* filename) {
+    FILE* f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot write to %s\n", filename);
+        return;
+    }
+    
+    fprintf(f, "      A   B   C   D   E   F   G   H\n");
+    fprintf(f, "    +---+---+---+---+---+---+---+---+\n");
+    
+    for (int r = 0; r < 8; r++) {
+        fprintf(f, " %d  |", 8 - r);
+        for (int c = 0; c < 8; c++) {
+            uint8_t piece = get_piece(b, rc_to_idx(r, c));
+            if (piece == EMPTY) {
+                fprintf(f, "   |");
+            } else {
+                uint8_t color = piece / 8;
+                uint8_t type = piece % 8;
+                char ch = "PNBRQK"[type - 1];
+                if (color == BLACK) ch = tolower(ch);
+                fprintf(f, " %c |", ch);
+            }
+        }
+        fprintf(f, " %d\n", 8 - r);
+        
+        if (r < 7) {
+            fprintf(f, "    +---+---+---+---+---+---+---+---+\n");
+        }
+    }
+    
+    fprintf(f, "    +---+---+---+---+---+---+---+---+\n");
+    fprintf(f, "      A   B   C   D   E   F   G   H\n");
+    
+    fclose(f);
+}
+
+void load_board_raw(Board* b, const char* data_str) {
+    memset(b->squares, EMPTY, BOARD_SIZE);
+    
+    
+    char buffer[16384];
+    strncpy(buffer, data_str, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+    
+    int row = 0;
+    char* line = strtok(buffer, "\n");
+    
+    while (line && row < 8) {
+        if (strchr(line, 'A') || strchr(line, '+') || strlen(line) < 5) {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+        
+        int col = 0;
+        for (int i = 0; line[i] && col < 8; i++) {
+            if (line[i] == '|') {
+                int j = i + 1;
+                while (j < (int)strlen(line) && line[j] == ' ') j++;
+                
+                if (j < (int)strlen(line) && line[j] != '|') {
+                    char piece_ch = line[j];
+                    uint8_t piece = EMPTY;
+                    
+                    if (piece_ch != ' ') {
+                        uint8_t color = isupper(piece_ch) ? WHITE : BLACK;
+                        char upper_ch = toupper(piece_ch);
+                        
+                        switch (upper_ch) {
+                            case 'P': piece = color * 8 + P; break;
+                            case 'N': piece = color * 8 + N; break;
+                            case 'B': piece = color * 8 + B; break;
+                            case 'R': piece = color * 8 + R; break;
+                            case 'Q': piece = color * 8 + Q; break;
+                            case 'K': piece = color * 8 + K; break;
+                        }
+                    }
+                    
+                    set_piece(b, rc_to_idx(row, col), piece);
+                    col++;
+                }
+            }
+        }
+        
+        if (col == 8) row++;  
+        line = strtok(NULL, "\n");
+    }
+}
+
+void parse_cli_args(int argc, char* argv[], char** input_file, char** output_file, 
+                    char** move_from, char** move_to, int* debug, int* threads, 
+                    int* difficulty, int* depth) {
+    for (int i = 1; i < argc; i++) {
+        char* arg = argv[i];
+        char* value = strchr(arg, '=');
+        
+        if (!value) continue;
+        *value = '\0';
+        value++;
+        
+        if (strcmp(arg, "-i") == 0) {
+            *input_file = value;
+        } else if (strcmp(arg, "-o") == 0) {
+            *output_file = value;
+        } else if (strcmp(arg, "-m") == 0) {
+            *move_from = value;
+            for (int j = i + 1; j < argc; j++) {
+                if (argv[j][0] != '-') {
+                    *move_to = argv[j];
+                    i = j;
+                    break;
+                }
+            }
+        } else if (strcmp(arg, "-d") == 0) {
+            *debug = atoi(value);
+        } else if (strcmp(arg, "-t") == 0 || strcmp(arg, "-threads") == 0) {
+            *threads = atoi(value);
+        } else if (strcmp(arg, "-diff") == 0 || strcmp(arg, "-difficulty") == 0) {
+            *difficulty = atoi(value);
+        } else if (strcmp(arg, "-depth") == 0) {
+            *depth = atoi(value);
+        }
+    }
+}
+
+bool apply_move_from_alg(Board* b, const char* from_alg, const char* to_alg) {
+    int from = parse_input(from_alg);
+    int to = parse_input(to_alg);
+    
+    if (from == -1 || to == -1) {
+        fprintf(stderr, "Invalid squares: %s -> %s\n", from_alg, to_alg);
+        return false;
+    }
+    
+    uint8_t source_piece = get_piece(b, from);
+    if (source_piece == EMPTY) {
+        fprintf(stderr, "No piece at source square: %s\n", from_alg);
+        return false;
+    }
+    
+    uint8_t moving_color = source_piece / 8;
+    
+    Move all_moves[MAX_MOVES];
+    int count = 0;
+    generate_moves_captures_first(b, moving_color, all_moves, &count);
+    
+    for (int i = 0; i < count; i++) {
+        if (all_moves[i].from == from && all_moves[i].to == to) {
+            if (is_legal(b, &all_moves[i], moving_color)) {
+                make_move(b, &all_moves[i]);
+                return true;
+            }
+        }
+    }
+    
+    fprintf(stderr, "Illegal move: %s -> %s\n", from_alg, to_alg);
+    return false;
+}
+
+void get_default_board(Board* b) {
+    init_board(b);
+}
+
+int main(int argc, char* argv[]) {
     #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     #endif
+    
+    char* input_file = NULL;
+    char* output_file = NULL;
+    char* move_from = NULL;
+    char* move_to = NULL;
+    int cli_debug = 0;
+    int cli_threads = 1;
+    int cli_difficulty = 2;
+    int cli_depth = 6;
+    
+    if (argc > 1) {
+        parse_cli_args(argc, argv, &input_file, &output_file, &move_from, &move_to, 
+                      &cli_debug, &cli_threads, &cli_difficulty, &cli_depth);
+        
+        if (!move_from || !move_to || !output_file) {
+            fprintf(stderr, "Usage: chess -m=<from> <to> -o=<output_file> [-i=<input_file>] [options]\n");
+            fprintf(stderr, "\nRequired:\n");
+            fprintf(stderr, "  -m=FROM TO            Move in algebraic notation (e.g., e2 e4)\n");
+            fprintf(stderr, "  -o=FILE               Output board file\n");
+            fprintf(stderr, "\nOptional:\n");
+            fprintf(stderr, "  -i=FILE               Input board file (default: standard starting position)\n");
+            fprintf(stderr, "  -d=<0|1>              Debug output (default=0)\n");
+            fprintf(stderr, "  -t=<threads>          Number of threads (default=1)\n");
+            fprintf(stderr, "  -diff=<1|2|3>         Difficulty: 1=Beginner, 2=Easy, 3=Hard (default=2)\n");
+            fprintf(stderr, "  -depth=<depth>        Search depth for Hard mode (default=6)\n");
+            fprintf(stderr, "\nExamples:\n");
+            fprintf(stderr, "  chess -m=e2 e4 -o=board.txt\n");
+            fprintf(stderr, "  chess -i=board.txt -m=e2 e4 -o=result.txt -d=1 -t=4\n");
+            return 1;
+        }
+        
+        srand(time(NULL));
+        init_zobrist();
+        tt_init();
+        
+        Board board;
+        memset(&board, 0, sizeof(Board));
+        
+        if (input_file) {
+            FILE* f = fopen(input_file, "r");
+            if (!f) {
+                fprintf(stderr, "Error: Cannot read input file %s\n", input_file);
+                return 1;
+            }
+            
+            char file_buffer[8192] = {0};
+            size_t bytes_read = fread(file_buffer, 1, sizeof(file_buffer) - 1, f);
+            fclose(f);
+            file_buffer[bytes_read] = '\0';
+            
+            load_board_raw(&board, file_buffer);
+        } else {
+            init_board(&board);
+        }
+        
+        int thread_count = (cli_threads > 1) ? cli_threads : 1;
+        if (thread_count > 1) {
+            start_thread_pool(thread_count);
+            if (cli_debug) printf("Started with %d threads\n", thread_count);
+        }
+        
+        debug_pvs = cli_debug;
+        
+        if (cli_debug) {
+            printf("Input file: %s\n", input_file);
+            printf("Move: %s -> %s\n", move_from, move_to);
+            printf("Output file: %s\n", output_file);
+            printf("Difficulty: %d, Depth: %d\n", cli_difficulty, cli_depth);
+            printf("\nBoard before move:\n");
+            print_board(&board);
+        }
+        
+        if (!apply_move_from_alg(&board, move_from, move_to)) {
+            fprintf(stderr, "Failed to apply move\n");
+            return 1;
+        }
+        
+        if (cli_debug) {
+            printf("Board after move:\n");
+            print_board(&board);
+        }
+        
+        output_board_raw(&board, output_file);
+        
+        if (cli_debug) {
+            printf("Output saved to: %s\n", output_file);
+        }
+        
+        return 0;
+    }
     
     srand(time(NULL));
     init_zobrist();
@@ -1146,10 +1408,12 @@ int main() {
     
     int thread_count = select_thread_count();
     start_thread_pool(thread_count);
-    printf("Started with %d threads, shared 128MB transposition table\n\n", thread_count);
+    printf("Started with %d threads, shared transposition table\n\n", thread_count);
     
     int difficulty = select_difficulty();
     int search_depth = 6;
+
+    debug_pvs = select_debug();
     
     if (difficulty == 3) {
         search_depth = select_search_depth();
